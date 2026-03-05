@@ -8,7 +8,7 @@ From the [Coding from Beach](https://www.codingfrombeach.com) workshop series.
 
 ## What is this?
 
-This repo is your starting point for the workshop. You describe what you want your device to do, and your coding agent (Claude Code, Codex, Cursor, etc.) handles the rest — writing the code, compiling it, and flashing it to your board.
+This repo is your starting point for the CfB vibe hardware workshop. You describe what you want your device to do, and your coding agent (Claude Code, Codex, Cursor, etc.) handles the rest — writing the code, compiling it, and flashing it to your board.
 
 No terminal skills needed. No hardware experience needed. Just vibes.
 
@@ -19,7 +19,7 @@ No terminal skills needed. No hardware experience needed. Just vibes.
 - A laptop (charged)
 - A USB-C cable
 - A coding agent: Claude Code, Codex, or Cursor
-- An ESP32 board
+- An ESP32 board - provided
 
 ---
 
@@ -44,7 +44,7 @@ If you brought your own ESP32, that works too — let your agent know what board
 ## How it works
 
 1. Agent checks your setup and installs anything missing
-2. Board connects to WiFi and shows its IP on the OLED
+2. Agent flashes hello world sketch to the board
 3. You describe what you want to build
 4. Agent writes the code, compiles it, and flashes it to your board wirelessly
 5. Repeat
@@ -58,5 +58,5 @@ CLAUDE.md       — instructions for your coding agent
 AGENTS.md       — same, for non-Claude agents
 BOOTSTRAP.md    — setup checklist (agent use only)
 BOARD.md        — hardware reference for the ESP32-C3 board
-starter/        — pre-flashed starter project source
+sketches/hello_oled — starter project source
 ```
