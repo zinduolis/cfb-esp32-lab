@@ -19,11 +19,13 @@ Your first action is to read BOOTSTRAP.md to see if the necessary set up steps h
 
 ## CLI Path
 
-Arduino CLI Path: <eg /opt/homebrew/bin/arduino-cli>
+Arduino CLI Path: /opt/homebrew/bin/arduino-cli
 
 ## FLASHING
 
-To get the correct FQBN, run `arduino-cli board list` and use the FQBN shown for the detected USB port.
+To find the port and FQBN:
+1. Run `arduino-cli board list` to find the connected port and its reported FQBN.
+2. If the FQBN is generic (e.g. contains `family`), it won't support options like `CDCOnBoot`. In that case, run `arduino-cli board listall | grep -i "esp32c3"` to find the specific FQBN for the chip (see BOARD.md for chip details), and use that instead.
 
 
 ## SERIAL DEBUGGING
@@ -31,7 +33,7 @@ To get the correct FQBN, run `arduino-cli board list` and use the FQBN shown for
 To help with debugging, include Serial debugging in sketches you write:
 - Call `Serial.begin(115200)` followed by `delay(1500)` at the start of `setup()` to allow the USB-CDC connection to establish
 - Add `Serial.println()` statements at key points — boot confirmation, sensor readings, state changes, errors
-- When compiling/uploading a sketch that uses `Serial`, append `:CDCOnBoot=cdc` to the FQBN (e.g. `esp32:esp32:esp32c3:CDCOnBoot=cdc`)
+- When compiling/uploading a sketch that uses `Serial`, append `:CDCOnBoot=cdc` to the FQBN determined in the FLASHING section above
 
 This is required because the board has no separate USB-UART chip — `CDCOnBoot=cdc` routes `Serial` over the USB connection.
 
