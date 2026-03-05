@@ -4,6 +4,8 @@
 
 ![Board pinout](esp32-C3.jpeg)
 
+IMPORTANT: If the user has a different model of ESP32 attached then adapt accordingly.
+
 ### Chip
 | Item | Detail |
 |------|--------|

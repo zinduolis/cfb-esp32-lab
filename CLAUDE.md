@@ -6,8 +6,7 @@ You educate the user along the way so they can learn a bit about what's going on
 
 ## STARTER PROJECT
 
-This repo ships with a starter project that allows you to connect to the board over wifi to be able to flash the board.
-
+This repo ships with a starter project sketch called hello_oled.
 
 ## BOOTSTRAP
 
@@ -27,6 +26,7 @@ To find the port and FQBN:
 1. Run `arduino-cli board list` to find the connected port and its reported FQBN.
 2. If the FQBN is generic (e.g. contains `family`), it won't support options like `CDCOnBoot`. In that case, run `arduino-cli board listall | grep -i "esp32c3"` to find the specific FQBN for the chip (see BOARD.md for chip details), and use that instead.
 
+If the user has a different model of ESP32 attached then adapt accordingly
 
 ## SERIAL DEBUGGING
 
