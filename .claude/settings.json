@@ -39,6 +39,8 @@
       "Bash(unzip:*)",
       "Bash(tar:*)",
       "Bash(brew:*)",
+      "Bash(docker:*)",
+      "Bash(docker compose:*)",
       "Bash(git:*)",
       "Bash(make:*)",
       "Bash(cmake:*)",

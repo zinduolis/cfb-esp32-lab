@@ -4,67 +4,56 @@ This file is for the agent. Work through each step silently. Keep the user infor
 
 ---
 
-## Step 1: Arduino CLI
+## Step 1: Docker toolchain
 
-1. Locate `arduino-cli` using: `which arduino-cli || find /usr /opt /home/$USER ~/bin -name arduino-cli 2>/dev/null | head -1`
-2. If found, record the full path. If `arduino-cli version` works without a full path, use `arduino-cli`. Otherwise use the full path for all subsequent commands.
-3. If not found, detect OS and install:
-   - Run `uname` → `Darwin` = macOS, `Linux` = Linux
-   - On Windows: `$env:OS` returns `Windows_NT`
-3. Install:
-
-   **macOS:**
-   - `which brew` — if found: `brew install arduino-cli`
-   - If no brew: `curl -fsSL https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_macOS_64bit.tar.gz | tar xz -C /usr/local/bin`
-
-   **Linux:**
-   - `curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh`
-   - If not on PATH: `sudo mv arduino-cli /usr/local/bin/`
-
-   **Windows:**
-   - `winget --version` — if found: `winget install Arduino.ArduinoCLI`
-   - If no winget: download `https://downloads.arduino.cc/arduino-cli/arduino-cli_latest_Windows_64bit.zip`, extract, add to PATH
-
-4. Confirm it works, then record the resolved path in CLAUDE.md under the `## TOOLS` section, replacing the `<!-- BOOTSTRAP WILL FILL THIS IN -->` comment with:
+1. Check whether `docker` is available.
+2. If Docker is missing, install Docker Desktop or Docker Engine for the host OS.
+3. From the repo root, build the shared image:
    ```
-   - `arduino-cli` path: <full path> — always use this full path, do not assume it is on PATH.
-   - ESP32 core status: <installed/not installed>
+   docker compose build
    ```
-5. Install ESP32 core if not already present:
+4. Confirm the containerized tools work:
    ```
-   arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   bin/arduino-cli version
+   (cd ota_base_fw && ../bin/idf.py --version)
    ```
+5. Treat the repo-local wrappers as the default interface for future work:
+   - `bin/arduino-cli`
+   - `bin/idf.py`
+   - `bin/arduino-compile`
+   - `bin/idf-build`
+   - `bin/idf-ota-upload`
 
-[] Arduino CLI installed
-[] Updated CLI path in CLAUDE.md and AGENTS.md
+[] Docker toolchain ready
+[] Updated CLAUDE.md and AGENTS.md for Docker workflow
 
 ---
 
 ## Step 2: Connect to the board
 
-The default assumption is that the board is connected via USB-C data cable.
+Prefer OTA for the Dockerized workflow.
 
-**Path A — USB cable (default):**
-- Run `arduino-cli board list` and confirm a port appears
-- Store the port for use in subsequent flashing
+**Path A — WiFi / OTA (default):**
+- Ask the user to power the board on and read the IP from the OLED if needed
+- Confirm the device is reachable over the network
+- Store the IP or URL for use in subsequent OTA uploads
 
-**Path B — WiFi (no cable):**
-- If no USB port is detected, ask the user to power the board on and read the IP from the OLED
-- Ping the IP to confirm it's reachable
-- Store the IP for use in subsequent flashing
+**Path B — USB cable (fallback):**
+- Only use direct USB flashing if OTA is unavailable
+- On macOS, remember Docker Desktop is not a clean replacement for serial passthrough; USB recovery may require a host-side fallback or another machine
 
 [] Board is reachable
 
 ---
 
-## Step 3: Test flash
+## Step 3: Test build and upload
 
-- Compile and flash `sketches/hello_oled/hello_oled.ino`
-- Use USB port if detected, otherwise WiFi OTA
-- Confirm the OLED updates with the hello_oled output
+- Compile `sketches/hello_oled` with `bin/arduino-compile`
+- Build `ota_base_fw` with `bin/idf-build`
+- If the board is already running OTA-capable firmware, test upload with `bin/idf-ota-upload <device-ip-or-url>`
+- Confirm the device responds after OTA when that path is available
 
-[] Test flash succeeded
+[] Test build and OTA path succeeded
 
 ---
 
@@ -72,5 +61,5 @@ The default assumption is that the board is connected via USB-C data cable.
 
 Once all steps are checked, update CLAUDE.md:
 - Change `[] Bootstrap complete` to `[x] Bootstrap complete`
-- Ensure the `## TOOLS` section has been filled in with the detected arduino-cli path and ESP32 core status
+- Ensure the Docker workflow is reflected in `CLAUDE.md` and `AGENTS.md`
 - Do not bother the user with details — just let them know they're ready to go

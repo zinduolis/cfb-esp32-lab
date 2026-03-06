@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+WORKDIR="/workspace"
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker is required to use the containerized workflow." >&2
+  exit 1
+fi
+
+if [[ "${PWD}" == "${REPO_ROOT}" ]]; then
+  WORKDIR="/workspace"
+elif [[ "${PWD}" == "${REPO_ROOT}"/* ]]; then
+  WORKDIR="/workspace/${PWD#${REPO_ROOT}/}"
+fi
+
+compose_args=(run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp/esp32-home -w "${WORKDIR}")
+
+if [[ ! -t 0 || ! -t 1 ]]; then
+  compose_args+=(-T)
+fi
+
+if [[ "$#" -eq 0 ]]; then
+  exec docker compose -f "${REPO_ROOT}/compose.yaml" "${compose_args[@]}" esp32 bash
+fi
+
+exec docker compose -f "${REPO_ROOT}/compose.yaml" "${compose_args[@]}" esp32 "$@"

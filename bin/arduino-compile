@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+SKETCH_PATH="${1:-sketches/hello_oled}"
+FQBN="${2:-esp32:esp32:esp32c3:CDCOnBoot=cdc}"
+
+if [[ "${SKETCH_PATH}" = /* ]]; then
+  if [[ "${SKETCH_PATH}" != "${REPO_ROOT}"/* ]]; then
+    echo "Sketch path must be inside ${REPO_ROOT}" >&2
+    exit 1
+  fi
+  RELATIVE_SKETCH_PATH="${SKETCH_PATH#${REPO_ROOT}/}"
+else
+  RELATIVE_SKETCH_PATH="${SKETCH_PATH}"
+fi
+
+SKETCH_NAME="$(basename "${RELATIVE_SKETCH_PATH}")"
+OUTPUT_DIR="/tmp/arduino-build/${SKETCH_NAME}"
+
+exec "${SCRIPT_DIR}/docker-run" arduino-cli compile \
+  --fqbn "${FQBN}" \
+  --output-dir "${OUTPUT_DIR}" \
+  "/workspace/${RELATIVE_SKETCH_PATH}"

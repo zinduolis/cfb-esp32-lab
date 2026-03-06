@@ -1,10 +1,28 @@
-# Build artifacts
-ota_base_fw/build/
-ota_base_fw/build_c3/
+# Compiled firmware binaries
+*.bin
+*.elf
+*.map
+
+# Secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials.*
+secrets.*
 
 # macOS
 .DS_Store
+._*
 
-# Sketch build artifacts (keep .bin files)
-sketches/**/*.elf
-sketches/**/*.map
+# Editor / IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# Docker
+docker-compose.override.yaml

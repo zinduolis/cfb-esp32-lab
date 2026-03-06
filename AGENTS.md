@@ -17,15 +17,30 @@ Your first action is to read BOOTSTRAP.md to see if the necessary set up steps h
 
 [] Bootstrap complete
 
-## CLI Path
+## Container Tooling
 
-Arduino CLI Path: /opt/homebrew/bin/arduino-cli
+Default to the repo's Docker workflow instead of installing firmware toolchains on the host.
+
+Use these repo-local commands:
+
+- `bin/arduino-cli` — run Arduino CLI inside Docker
+- `bin/idf.py` — run `idf.py` inside Docker
+- `bin/arduino-compile` — compile Arduino sketches inside Docker
+- `bin/idf-build` — build ESP-IDF firmware inside Docker
+- `bin/idf-ota-upload` — build and upload `ota_base_fw` over WiFi from Docker
+- `bin/docker-shell` — open a shell inside the container
 
 ## FLASHING
 
-To find the port and FQBN:
-1. Run `arduino-cli board list` to find the connected port and its reported FQBN.
-2. If the FQBN is generic (e.g. contains `family`), it won't support options like `CDCOnBoot`. In that case, run `arduino-cli board listall | grep -i "esp32c3"` to find the specific FQBN for the chip (see BOARD.md for chip details), and use that instead.
+Prefer WiFi/OTA flows for this repo's containerized workflow.
+
+For Arduino sketches, use the ESP32-C3 FQBN:
+
+- `esp32:esp32:esp32c3:CDCOnBoot=cdc`
+
+For ESP-IDF firmware, prefer `bin/idf-ota-upload <device-ip-or-url>` when the board is already running OTA-capable firmware.
+
+Direct USB flashing from Docker is not the reliable default path on macOS Docker Desktop. If a board truly requires first-time USB recovery, treat that as a special-case fallback rather than the normal workflow.
 
 If the user has a different model of ESP32 attached then adapt accordingly
 
@@ -36,7 +51,7 @@ To help with debugging, include Serial debugging in sketches you write:
 - Add `Serial.println()` statements at key points — boot confirmation, sensor readings, state changes, errors
 - When compiling/uploading a sketch that uses `Serial`, append `:CDCOnBoot=cdc` to the FQBN determined in the FLASHING section above
 
-This is required because the board has no separate USB-UART chip — `CDCOnBoot=cdc` routes `Serial` over the USB connection.
+This is required because the board has no separate USB-UART chip — `CDCOnBoot=cdc` routes `Serial` over the USB connection when USB flashing is used.
 
 ## WORKSHOP WIFI
 

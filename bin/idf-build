@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+PROJECT_PATH="${1:-ota_base_fw}"
+
+if [[ "${PROJECT_PATH}" = /* ]]; then
+  if [[ "${PROJECT_PATH}" != "${REPO_ROOT}"/* ]]; then
+    echo "Project path must be inside ${REPO_ROOT}" >&2
+    exit 1
+  fi
+  RELATIVE_PROJECT_PATH="${PROJECT_PATH#${REPO_ROOT}/}"
+else
+  RELATIVE_PROJECT_PATH="${PROJECT_PATH}"
+fi
+
+exec "${SCRIPT_DIR}/docker-run" bash -lc "cd \"/workspace/${RELATIVE_PROJECT_PATH}\" && idf.py -B /tmp/idf-build build"

@@ -1,0 +1,16 @@
+services:
+  esp32:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    command: sleep infinity
+    init: true
+    tty: true
+    stdin_open: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - .:/workspace
