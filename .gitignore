@@ -1,4 +1,5 @@
 # Compiled firmware binaries
+build/
 *.bin
 *.elf
 *.map
@@ -23,6 +24,9 @@ secrets.*
 *.swp
 *.swo
 *~
+
+# Python virtual environment
+.venv/
 
 # Docker
 docker-compose.override.yaml

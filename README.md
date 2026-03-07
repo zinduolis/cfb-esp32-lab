@@ -31,7 +31,7 @@ No terminal skills needed. No hardware experience needed. Just vibes.
 
 - A laptop (charged)
 - Docker Desktop or Docker Engine
-- A USB-C cable for first-time recovery or non-OTA boards
+- A USB-C data cable
 - A coding agent: Claude Code, Codex, or Cursor
 - An ESP32 board - provided
 
@@ -66,12 +66,11 @@ The diagram below shows how code flows from your laptop to the ESP32 board. Ever
 │  ┌────────────────────────────────────────────────▼──────────┐  │
 │  │  DOCKER CONTAINER                                         │  │
 │  │                                                           │  │
-│  │  ┌─────────────┐      ┌──────────────┐                    │  │
-│  │  │ Arduino CLI │      │   ESP-IDF    │                    │  │
-│  │  │             │      │   (idf.py)   │                    │  │
-│  │  └──────┬──────┘      └──────┬───────┘                    │  │
-│  │         │                    │                             │  │
-│  │         ▼                    ▼                             │  │
+│  │  ┌─────────────┐                                          │  │
+│  │  │ Arduino CLI │                                          │  │
+│  │  └──────┬──────┘                                          │  │
+│  │         │                                                 │  │
+│  │         ▼                                                 │  │
 │  │  ┌─────────────────────────────────────┐                  │  │
 │  │  │  Cross-compiler (riscv32-esp-elf)   │                  │  │
 │  │  └──────────────────┬──────────────────┘                  │  │
@@ -80,14 +79,12 @@ The diagram below shows how code flows from your laptop to the ESP32 board. Ever
 │  │              firmware.bin                                 │  │
 │  └─────────────────────┬─────────────────────────────────────┘  │
 │                        │                                        │
-│               ┌────────┴────────┐                               │
-│               │                 │                               │
-│          WiFi / OTA         USB serial                          │
-│          (preferred)        (fallback)                          │
-│               │                 │                               │
-└───────────────┼─────────────────┼───────────────────────────────┘
-                │                 │
-                ▼                 ▼
+│                   USB serial                                    │
+│                  (esptool.py)                                   │
+│                        │                                        │
+└────────────────────────┼────────────────────────────────────────┘
+                         │
+                         ▼
         ┌──────────────────────────────┐
         │        ESP32-C3 Board        │
         │  ┌──────────┐  ┌──────────┐  │
@@ -97,18 +94,13 @@ The diagram below shows how code flows from your laptop to the ESP32 board. Ever
         └──────────────────────────────┘
 ```
 
-**WiFi/OTA flow (preferred):** The board runs a small HTTP server. The container builds the firmware, then `curl` posts the `.bin` file to `http://<board-ip>/ota`. The board flashes itself and reboots — no cables needed.
-
-**USB flow (fallback):** Only needed if the board has no OTA firmware or WiFi is unavailable. Requires a USB-C data cable and direct serial access from the host.
+**How it works:** Docker compiles the firmware, then `esptool.py` on the host flashes it to the board over USB. One command: `bin/arduino-usb-flash`.
 
 ---
 
 ## Docker-first workflow
 
-This repo ships with a Docker toolchain for the two build systems it uses:
-
-- Arduino sketches in `sketches/`
-- ESP-IDF firmware in `ota_base_fw/`
+This repo ships with a Docker toolchain for compiling Arduino sketches in `sketches/`.
 
 Build the shared image once:
 
@@ -119,10 +111,9 @@ docker compose build
 Then use the repo-local wrappers:
 
 ```bash
-bin/arduino-compile sketches/hello_oled
-bin/idf-build ota_base_fw
-bin/idf-ota-upload 192.168.1.123
-bin/docker-shell
+bin/arduino-compile sketches/hello_oled       # compile in Docker
+bin/arduino-usb-flash sketches/hello_oled     # compile in Docker + flash over USB
+bin/docker-shell                              # open a shell in the container
 ```
 
 The container image includes:
@@ -130,25 +121,37 @@ The container image includes:
 - ESP-IDF `v5.5.3` (pinned with SHA256 digest)
 - `arduino-cli` `v1.4.1` (pinned with SHA256 checksum)
 - the `esp32:esp32` Arduino core
-- the `U8g2` library needed by the starter sketch
+- the `U8g2` and `Adafruit NeoPixel` libraries
 
-If you prefer working inside a containerized editor session, the repo also includes `.devcontainer/devcontainer.json`.
+### USB flash setup
 
-### Important limitation on macOS
+Docker compiles the firmware, then `esptool.py` on the host flashes it over USB. Docker Desktop on macOS cannot access USB serial devices directly, so `esptool.py` runs on the host.
 
-Docker Desktop on macOS is great for building firmware, but it is not a complete replacement for direct USB serial device access. That means:
+One-time setup (uses a virtual environment to keep your system Python clean):
 
-- Arduino and ESP-IDF builds work in Docker
-- OTA uploads work in Docker
-- direct USB flashing from Docker is not the reliable default path on macOS
+```bash
+python3 -m venv .venv && .venv/bin/pip install esptool
+```
 
-For this workshop board that is usually fine, because the intended path is WiFi/OTA after the board has been prepared.
+The flash script auto-detects `esptool` in the `.venv` — no need to activate it. Then compile and flash in one step:
+
+```bash
+bin/arduino-usb-flash sketches/hello_oled
+```
+
+The script auto-detects the USB serial port. If you have multiple boards, pass the port explicitly:
+
+```bash
+bin/arduino-usb-flash sketches/hello_oled esp32:esp32:esp32c3:CDCOnBoot=cdc /dev/cu.usbmodem1234
+```
+
+> **Note:** `esptool.py` is the only host-side dependency beyond Docker. It is a pure-Python package installed in a project-local `.venv` to avoid polluting your system Python.
 
 ---
 
 ## The board
 
-Workshop boards are the **ESP32-C3** with a 0.42" OLED display. They come pre-flashed with a starter project that connects to WiFi and shows the board's IP address on screen, enabling wireless flashing from the start.
+Workshop boards are the **ESP32-C3** with a 0.42" OLED display. They come pre-flashed with a starter project. Connect via USB-C data cable to flash new firmware.
 
 If you brought your own ESP32, that works too — let your agent know what board you have.
 
@@ -157,9 +160,9 @@ If you brought your own ESP32, that works too — let your agent know what board
 ## How it works
 
 1. Agent checks your setup and brings up the Docker toolchain
-2. Agent flashes hello world sketch to the board
+2. Agent flashes hello world sketch to the board over USB
 3. You describe what you want to build
-4. Agent writes the code, compiles it, and flashes it to your board wirelessly
+4. Agent writes the code, compiles it, and flashes it to your board
 5. Repeat
 
 ---
@@ -175,5 +178,4 @@ Dockerfile      — shared ESP-IDF + Arduino CLI image
 compose.yaml    — container service definition
 bin/            — repo-local wrapper commands
 sketches/       — Arduino sketch source code
-ota_base_fw/    — ESP-IDF base firmware (WiFi + OTA server)
 ```

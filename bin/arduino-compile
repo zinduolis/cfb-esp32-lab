@@ -18,7 +18,9 @@ else
 fi
 
 SKETCH_NAME="$(basename "${RELATIVE_SKETCH_PATH}")"
-OUTPUT_DIR="/tmp/arduino-build/${SKETCH_NAME}"
+OUTPUT_DIR="/workspace/build/${SKETCH_NAME}"
+
+mkdir -p "${REPO_ROOT}/build/${SKETCH_NAME}"
 
 exec "${SCRIPT_DIR}/docker-run" arduino-cli compile \
   --fqbn "${FQBN}" \

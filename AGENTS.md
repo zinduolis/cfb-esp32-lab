@@ -4,16 +4,24 @@ The approach here is "vibe hardware": user describes what they want and coding a
 
 You educate the user along the way so they can learn a bit about what's going on but you understand that they are not skilled or experienced with creating firmware, flashing, cmd line, bash, etc. You handle all of that on their behalf.
 
+## Table of contents
+
+- [Starter project](#starter-project)
+- [Bootstrap](#bootstrap)
+- [Container Tooling](#container-tooling)
+- [Flashing](#flashing)
+- [Serial debugging](#serial-debugging)
+- [Board details](#board-details)
+
 ## STARTER PROJECT
 
 This repo ships with a starter project sketch called hello_oled.
-
 
 ## BOOTSTRAP
 
 This repo is intended to be self-driving to get the user started with minimal fuss.
 
-Your first action is to read BOOTSTRAP.md to see if the necessary set up steps have been completed. The board comes pre-flashed with the starter project so WiFi flashing is available from the start — a USB data cable is optional. You are responsible for completing bootstrap steps on behalf of the user — including installing Arduino CLI if needed. Mark bootstrap complete below when fully set up. If marked complete, there is no need to read BOOTSTRAP.md
+Your first action is to read BOOTSTRAP.md to see if the necessary set up steps have been completed. You are responsible for completing bootstrap steps on behalf of the user. Mark bootstrap complete below when fully set up. If marked complete, there is no need to read BOOTSTRAP.md
 
 [] Bootstrap complete
 
@@ -24,25 +32,29 @@ Default to the repo's Docker workflow instead of installing firmware toolchains 
 Use these repo-local commands:
 
 - `bin/arduino-cli` — run Arduino CLI inside Docker
-- `bin/idf.py` — run `idf.py` inside Docker
-- `bin/arduino-compile` — compile Arduino sketches inside Docker
-- `bin/idf-build` — build ESP-IDF firmware inside Docker
-- `bin/idf-ota-upload` — build and upload `ota_base_fw` over WiFi from Docker
+- `bin/arduino-compile` — compile Arduino sketches inside Docker (output: `build/`)
+- `bin/arduino-usb-flash` — compile in Docker + flash over USB via host `esptool.py`
 - `bin/docker-shell` — open a shell inside the container
 
 ## FLASHING
 
-Prefer WiFi/OTA flows for this repo's containerized workflow.
+Flash over USB using `bin/arduino-usb-flash`. This compiles in Docker and flashes via host-side `esptool.py`.
 
 For Arduino sketches, use the ESP32-C3 FQBN:
 
 - `esp32:esp32:esp32c3:CDCOnBoot=cdc`
 
-For ESP-IDF firmware, prefer `bin/idf-ota-upload <device-ip-or-url>` when the board is already running OTA-capable firmware.
+### One-time setup
 
-Direct USB flashing from Docker is not the reliable default path on macOS Docker Desktop. If a board truly requires first-time USB recovery, treat that as a special-case fallback rather than the normal workflow.
+`esptool.py` is installed in a project-local virtual environment to keep your system Python clean:
 
-If the user has a different model of ESP32 attached then adapt accordingly
+```
+python3 -m venv .venv && .venv/bin/pip install esptool
+```
+
+The flash script auto-detects `esptool` in `.venv/` — no activation needed. This is the only host-side dependency beyond Docker.
+
+If the user has a different model of ESP32 attached then adapt accordingly.
 
 ## SERIAL DEBUGGING
 
@@ -52,13 +64,6 @@ To help with debugging, include Serial debugging in sketches you write:
 - When compiling/uploading a sketch that uses `Serial`, append `:CDCOnBoot=cdc` to the FQBN determined in the FLASHING section above
 
 This is required because the board has no separate USB-UART chip — `CDCOnBoot=cdc` routes `Serial` over the USB connection when USB flashing is used.
-
-## WORKSHOP WIFI
-
-Use these credentials whenever a sketch needs WiFi connectivity:
-
-- SSID: `cfb`
-- Password: `cfb_1958!`
 
 ## BOARD DETAILS
 

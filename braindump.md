@@ -6,6 +6,26 @@ Sourced from CfB braindump sessions, expanded with gaps identified afterward.
 Items marked **[braindump]** were explicitly raised in the planning chats.
 Items marked **[gap]** are related topics that were missed or underserved.
 
+## Table of contents
+
+- [1. The Hardware Itself](#1-the-hardware-itself)
+- [2. Power and Electrical Fundamentals](#2-power-and-electrical-fundamentals)
+- [3. Communication Buses and Peripherals](#3-communication-buses-and-peripherals)
+- [4. Common Peripherals and How to Use Them](#4-common-peripherals-and-how-to-use-them)
+- [5. Analog I/O](#5-analog-io)
+- [6. Wireless Communication](#6-wireless-communication)
+- [7. Networking and Cloud Connectivity](#7-networking-and-cloud-connectivity)
+- [8. Storage and Memory](#8-storage-and-memory)
+- [9. Firmware Architecture](#9-firmware-architecture)
+- [10. OTA and Partition Layout](#10-ota-and-partition-layout)
+- [11. Development Environment and Toolchain](#11-development-environment-and-toolchain)
+- [12. Flashing, Debugging, and Monitoring](#12-flashing-debugging-and-monitoring)
+- [13. AI-Assisted and Agentic Firmware Development](#13-ai-assisted-and-agentic-firmware-development)
+- [14. Practical Gotchas and Traps](#14-practical-gotchas-and-traps)
+- [15. Going Further - Ecosystem and Frameworks](#15-going-further---ecosystem-and-frameworks)
+- [16. "When I Get Home" - Making It Keep Working](#16-when-i-get-home---making-it-keep-working)
+- [17. Where to Learn and Buy](#17-where-to-learn-and-buy)
+
 ---
 
 ## 1. The Hardware Itself

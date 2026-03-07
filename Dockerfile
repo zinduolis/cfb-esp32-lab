@@ -28,7 +28,8 @@ RUN mkdir -p "${ARDUINO_DIRECTORIES_DATA}" "${ARDUINO_DIRECTORIES_DOWNLOADS}" "$
     && chmod -R 0777 /opt/arduino-cli \
     && arduino-cli core update-index --additional-urls "${ARDUINO_BOARD_MANAGER_URL}" \
     && arduino-cli core install esp32:esp32 --additional-urls "${ARDUINO_BOARD_MANAGER_URL}" \
-    && arduino-cli lib install "U8g2"
+    && arduino-cli lib install "U8g2" \
+    && arduino-cli lib install "Adafruit NeoPixel"
 
 WORKDIR /workspace
 
