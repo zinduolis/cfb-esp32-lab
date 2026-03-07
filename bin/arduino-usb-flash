@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+SKETCH_PATH="${1:-sketches/hello_oled}"
+FQBN="${2:-esp32:esp32:esp32c3:CDCOnBoot=cdc}"
+PORT="${3:-}"
+
+if [[ "${SKETCH_PATH}" = /* ]]; then
+  if [[ "${SKETCH_PATH}" != "${REPO_ROOT}"/* ]]; then
+    echo "Sketch path must be inside ${REPO_ROOT}" >&2
+    exit 1
+  fi
+  RELATIVE_SKETCH_PATH="${SKETCH_PATH#${REPO_ROOT}/}"
+else
+  RELATIVE_SKETCH_PATH="${SKETCH_PATH}"
+fi
+
+SKETCH_NAME="$(basename "${RELATIVE_SKETCH_PATH}")"
+BIN_FILE="${REPO_ROOT}/build/${SKETCH_NAME}/${SKETCH_NAME}.ino.merged.bin"
+
+ESPTOOL=""
+if command -v esptool.py >/dev/null 2>&1; then
+  ESPTOOL="esptool.py"
+elif [[ -x "${REPO_ROOT}/.venv/bin/esptool.py" ]]; then
+  ESPTOOL="${REPO_ROOT}/.venv/bin/esptool.py"
+else
+  echo "esptool.py is not installed. Set it up with:" >&2
+  echo "  python3 -m venv .venv && .venv/bin/pip install esptool" >&2
+  exit 1
+fi
+
+echo "==> Compiling ${SKETCH_NAME} in Docker..."
+"${SCRIPT_DIR}/arduino-compile" "${RELATIVE_SKETCH_PATH}" "${FQBN}"
+
+if [[ ! -f "${BIN_FILE}" ]]; then
+  echo "Error: expected merged binary not found at build/${SKETCH_NAME}/${SKETCH_NAME}.ino.merged.bin" >&2
+  echo "Check the compile output above for errors." >&2
+  exit 1
+fi
+
+if [[ -z "${PORT}" ]]; then
+  echo "==> Detecting USB serial port..."
+  candidates=()
+  for p in /dev/cu.usbmodem*; do
+    [[ -e "$p" ]] && candidates+=("$p")
+  done
+  if [[ ${#candidates[@]} -eq 0 ]]; then
+    echo "No USB serial port found (/dev/cu.usbmodem*)." >&2
+    echo "Make sure the board is connected via a USB data cable and try:" >&2
+    echo "  ls /dev/cu.usbmodem*" >&2
+    exit 1
+  elif [[ ${#candidates[@]} -gt 1 ]]; then
+    echo "Multiple USB serial ports found:" >&2
+    for p in "${candidates[@]}"; do echo "  $p" >&2; done
+    echo "Specify the port: bin/arduino-usb-flash <sketch> <fqbn> <port>" >&2
+    exit 1
+  fi
+  PORT="${candidates[0]}"
+fi
+
+echo "==> Flashing to ${PORT}..."
+"${ESPTOOL}" --chip esp32c3 --port "${PORT}" --baud 460800 \
+  write_flash 0x0 "${BIN_FILE}"
+
+echo "==> Done! Board should reboot with new firmware."

@@ -1,0 +1,15 @@
+.git
+.gitignore
+.DS_Store
+.build
+.devcontainer
+.claude
+.cursor
+
+ota_base_fw/build
+ota_base_fw/build_c3
+sketches/**/*.elf
+sketches/**/*.map
+
+*.md
+!README.md

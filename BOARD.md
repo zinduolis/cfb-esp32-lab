@@ -6,6 +6,14 @@
 
 IMPORTANT: If the user has a different model of ESP32 attached then adapt accordingly.
 
+## Table of contents
+
+- [Chip](#chip)
+- [Onboard OLED](#onboard-oled)
+- [Pin Map](#pin-map)
+- [Onboard RGB LED](#onboard-rgb-led)
+- [Key notes for programming](#key-notes-for-programming)
+
 ### Chip
 | Item | Detail |
 |------|--------|

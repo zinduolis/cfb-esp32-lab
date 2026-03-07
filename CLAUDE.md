@@ -4,6 +4,15 @@ The approach here is "vibe hardware": user describes what they want and coding a
 
 You educate the user along the way so they can learn a bit about what's going on but you understand that they are not skilled or experienced with creating firmware, flashing, cmd line, bash, etc. You handle all of that on their behalf.
 
+## Table of contents
+
+- [Starter project](#starter-project)
+- [Bootstrap](#bootstrap)
+- [Container Tooling](#container-tooling)
+- [Flashing](#flashing)
+- [Serial debugging](#serial-debugging)
+- [Board details](#board-details)
+
 ## STARTER PROJECT
 
 This repo ships with a starter project sketch called hello_oled.
@@ -12,21 +21,40 @@ This repo ships with a starter project sketch called hello_oled.
 
 This repo is intended to be self-driving to get the user started with minimal fuss.
 
-Your first action is to read BOOTSTRAP.md to see if the necessary set up steps have been completed. The board comes pre-flashed with the starter project so WiFi flashing is available from the start — a USB data cable is optional. You are responsible for completing bootstrap steps on behalf of the user — including installing Arduino CLI if needed. Mark bootstrap complete below when fully set up. If marked complete, there is no need to read BOOTSTRAP.md
+Your first action is to read BOOTSTRAP.md to see if the necessary set up steps have been completed. You are responsible for completing bootstrap steps on behalf of the user. Mark bootstrap complete below when fully set up. If marked complete, there is no need to read BOOTSTRAP.md
 
 [] Bootstrap complete
 
-## CLI Path
+## Container Tooling
 
-Arduino CLI Path: /opt/homebrew/bin/arduino-cli
+Default to the repo's Docker workflow instead of installing firmware toolchains on the host.
+
+Use these repo-local commands:
+
+- `bin/arduino-cli` — run Arduino CLI inside Docker
+- `bin/arduino-compile` — compile Arduino sketches inside Docker (output: `build/`)
+- `bin/arduino-usb-flash` — compile in Docker + flash over USB via host `esptool.py`
+- `bin/docker-shell` — open a shell inside the container
 
 ## FLASHING
 
-To find the port and FQBN:
-1. Run `arduino-cli board list` to find the connected port and its reported FQBN.
-2. If the FQBN is generic (e.g. contains `family`), it won't support options like `CDCOnBoot`. In that case, run `arduino-cli board listall | grep -i "esp32c3"` to find the specific FQBN for the chip (see BOARD.md for chip details), and use that instead.
+Flash over USB using `bin/arduino-usb-flash`. This compiles in Docker and flashes via host-side `esptool.py`.
 
-If the user has a different model of ESP32 attached then adapt accordingly
+For Arduino sketches, use the ESP32-C3 FQBN:
+
+- `esp32:esp32:esp32c3:CDCOnBoot=cdc`
+
+### One-time setup
+
+`esptool.py` is installed in a project-local virtual environment to keep your system Python clean:
+
+```
+python3 -m venv .venv && .venv/bin/pip install esptool
+```
+
+The flash script auto-detects `esptool` in `.venv/` — no activation needed. This is the only host-side dependency beyond Docker.
+
+If the user has a different model of ESP32 attached then adapt accordingly.
 
 ## SERIAL DEBUGGING
 
@@ -35,14 +63,7 @@ To help with debugging, include Serial debugging in sketches you write:
 - Add `Serial.println()` statements at key points — boot confirmation, sensor readings, state changes, errors
 - When compiling/uploading a sketch that uses `Serial`, append `:CDCOnBoot=cdc` to the FQBN determined in the FLASHING section above
 
-This is required because the board has no separate USB-UART chip — `CDCOnBoot=cdc` routes `Serial` over the USB connection.
-
-## WORKSHOP WIFI
-
-Use these credentials whenever a sketch needs WiFi connectivity:
-
-- SSID: `cfb`
-- Password: `cfb_1958!`
+This is required because the board has no separate USB-UART chip — `CDCOnBoot=cdc` routes `Serial` over the USB connection when USB flashing is used.
 
 ## BOARD DETAILS
 
