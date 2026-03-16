@@ -1,8 +1,5 @@
-# Compiled firmware binaries
-build/
-*.bin
-*.elf
-*.map
+# Compiled firmware / build artifacts
+**/build/
 
 # Secrets and credentials
 .env
