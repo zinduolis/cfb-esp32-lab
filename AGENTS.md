@@ -21,9 +21,7 @@ This repo ships with a starter project sketch called hello_oled.
 
 This repo is intended to be self-driving to get the user started with minimal fuss.
 
-Your first action is to read BOOTSTRAP.md to see if the necessary set up steps have been completed. You are responsible for completing bootstrap steps on behalf of the user. Mark bootstrap complete below when fully set up. If marked complete, there is no need to read BOOTSTRAP.md
-
-[] Bootstrap complete
+Your first action is to read `BOOTSTRAP.md` and verify each prerequisite. Complete any that are not yet satisfied. This is cheap and ensures correctness on every fresh clone or new session.
 
 ## Container Tooling
 
