@@ -25,5 +25,8 @@ secrets.*
 # Python virtual environment
 .venv/
 
+# Working documents (rewritten per sketch)
+PLAN.md
+
 # Docker
 docker-compose.override.yaml
