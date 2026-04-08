@@ -1,324 +1,391 @@
 #include <U8g2lib.h>
 #include <Wire.h>
+#include <Adafruit_NeoPixel.h>
 
-#define OLED_SDA_PIN 5
-#define OLED_SCL_PIN 6
-#define BOOT_BTN_PIN 9
+#define OLED_SDA  5
+#define OLED_SCL  6
+#define BTN_PIN   9  // BOOT button (only usable button; left button is RST)
+#define GRN_LED   8  // Onboard green/blue LED, active LOW
+#define NEO_PIN   2  // WS2812B NeoPixel (red)
 
-#define SCREEN_W 72
-#define SCREEN_H 40
+#define SCR_W 72
+#define SCR_H 40
+#define CELL  4
+#define BW    10
+#define BH    10
 
-#define CELL 4
-#define BOARD_W 10
-#define BOARD_H 10
-#define BOARD_X 0
-#define BOARD_Y 0
+#define DEBOUNCE_MS    100
+#define LONG_PRESS_MS  350
+#define FALL_START     600
+#define FALL_MIN       150
 
-#define BUTTON_DEBOUNCE_MS 150
-#define LONG_PRESS_MS 320
-#define FALL_MS_START 650
-#define FALL_MS_MIN 180
+U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL, OLED_SDA);
+Adafruit_NeoPixel neo(1, NEO_PIN, NEO_GRB + NEO_KHZ800);
 
-U8G2_SSD1306_72X40_ER_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, OLED_SCL_PIN, OLED_SDA_PIN);
+enum State { S_TITLE, S_PLAY, S_OVER };
+enum Act   { A_NONE, A_TAP, A_LONG };
+enum Fx    { FX_NONE, FX_LOCK, FX_CLEAR, FX_OVER, FX_START };
 
-enum GameState {
-  STATE_START,
-  STATE_PLAYING,
-  STATE_GAME_OVER
-};
+struct Piece { int8_t type, rot, x, y; };
 
-struct Piece {
-  int8_t type;
-  int8_t rot;
-  int8_t x;
-  int8_t y;
-};
-
-// 7 tetrominoes, 4 rotations, 4 blocks, (x,y)
-const int8_t SHAPES[7][4][4][2] = {
-  // I
-  {{{0,1},{1,1},{2,1},{3,1}}, {{2,0},{2,1},{2,2},{2,3}}, {{0,2},{1,2},{2,2},{3,2}}, {{1,0},{1,1},{1,2},{1,3}}},
-  // O
-  {{{1,0},{2,0},{1,1},{2,1}}, {{1,0},{2,0},{1,1},{2,1}}, {{1,0},{2,0},{1,1},{2,1}}, {{1,0},{2,0},{1,1},{2,1}}},
-  // T
-  {{{1,0},{0,1},{1,1},{2,1}}, {{1,0},{1,1},{2,1},{1,2}}, {{0,1},{1,1},{2,1},{1,2}}, {{1,0},{0,1},{1,1},{1,2}}},
-  // S
-  {{{1,0},{2,0},{0,1},{1,1}}, {{1,0},{1,1},{2,1},{2,2}}, {{1,1},{2,1},{0,2},{1,2}}, {{0,0},{0,1},{1,1},{1,2}}},
-  // Z
-  {{{0,0},{1,0},{1,1},{2,1}}, {{2,0},{1,1},{2,1},{1,2}}, {{0,1},{1,1},{1,2},{2,2}}, {{1,0},{0,1},{1,1},{0,2}}},
-  // J
-  {{{0,0},{0,1},{1,1},{2,1}}, {{1,0},{2,0},{1,1},{1,2}}, {{0,1},{1,1},{2,1},{2,2}}, {{1,0},{1,1},{0,2},{1,2}}},
-  // L
-  {{{2,0},{0,1},{1,1},{2,1}}, {{1,0},{1,1},{1,2},{2,2}}, {{0,1},{1,1},{2,1},{0,2}}, {{0,0},{1,0},{1,1},{1,2}}}
-};
-
-uint8_t board[BOARD_H][BOARD_W];
+State state = S_TITLE;
 Piece cur;
-GameState gameState = STATE_START;
+uint8_t board[BH][BW];
+uint16_t score = 0, totalLines = 0;
+unsigned long lastFall = 0;
 
-bool buttonWasDown = false;
-unsigned long pressStartMs = 0;
-unsigned long lastPressEventMs = 0;
-bool longHandled = false;
-unsigned long lastFallMs = 0;
-uint16_t score = 0;
-uint16_t lines = 0;
+bool btnDown = false;
+unsigned long btnPressT = 0, btnLastEvt = 0;
+bool btnLongDone = false;
 
-bool validAt(int8_t type, int8_t rot, int8_t px, int8_t py) {
+Fx fx = FX_NONE;
+unsigned long fxStart = 0;
+uint8_t fxParam = 0;
+unsigned long grnOffAt = 0;
+
+// --- Button ---
+
+Act pollBtn() {
+  bool p = (digitalRead(BTN_PIN) == LOW);
+  unsigned long now = millis();
+  Act a = A_NONE;
+
+  if (p && !btnDown) {
+    btnDown = true;
+    btnPressT = now;
+    btnLongDone = false;
+  }
+
+  if (p && btnDown && !btnLongDone && (now - btnPressT) >= LONG_PRESS_MS) {
+    btnLongDone = true;
+    btnLastEvt = now;
+    a = A_LONG;
+  }
+
+  if (!p && btnDown) {
+    if (!btnLongDone && (now - btnLastEvt) > DEBOUNCE_MS) {
+      btnLastEvt = now;
+      a = A_TAP;
+    }
+    btnDown = false;
+  }
+
+  return a;
+}
+
+// --- LEDs ---
+
+void flashGreen(unsigned long ms) {
+  digitalWrite(GRN_LED, LOW);
+  grnOffAt = millis() + ms;
+}
+
+void startFx(Fx f, uint8_t param = 0) {
+  fx = f;
+  fxStart = millis();
+  fxParam = param;
+}
+
+void tickLeds() {
+  if (grnOffAt && millis() >= grnOffAt) {
+    digitalWrite(GRN_LED, HIGH);
+    grnOffAt = 0;
+  }
+
+  unsigned long e = millis() - fxStart;
+  switch (fx) {
+    case FX_LOCK:
+      if (e < 50)
+        neo.setPixelColor(0, neo.Color(30, 0, 0));
+      else {
+        neo.setPixelColor(0, 0);
+        fx = FX_NONE;
+      }
+      break;
+
+    case FX_CLEAR: {
+      uint16_t dur = 300 + fxParam * 120;
+      if (e < dur) {
+        uint8_t bright = 200 - (uint8_t)(e * 170 / dur);
+        neo.setPixelColor(0, neo.Color(bright, 0, 0));
+      } else {
+        neo.setPixelColor(0, 0);
+        fx = FX_NONE;
+      }
+      break;
+    }
+
+    case FX_OVER:
+      if (e < 2000) {
+        bool on = ((e / 200) % 2) == 0;
+        neo.setPixelColor(0, on ? neo.Color(80, 0, 0) : 0);
+        if (on && !grnOffAt) flashGreen(100);
+      } else {
+        neo.setPixelColor(0, 0);
+        fx = FX_NONE;
+      }
+      break;
+
+    case FX_START:
+      if (e < 200)
+        neo.setPixelColor(0, neo.Color(20, 0, 0));
+      else {
+        neo.setPixelColor(0, 0);
+        fx = FX_NONE;
+      }
+      break;
+
+    default:
+      break;
+  }
+  neo.show();
+}
+
+// --- Tetromino data: 7 pieces x 4 rotations x 4 cells x (x,y) ---
+
+const int8_t SH[7][4][4][2] = {
+  {{{0,1},{1,1},{2,1},{3,1}}, {{2,0},{2,1},{2,2},{2,3}},
+   {{0,2},{1,2},{2,2},{3,2}}, {{1,0},{1,1},{1,2},{1,3}}},
+  {{{1,0},{2,0},{1,1},{2,1}}, {{1,0},{2,0},{1,1},{2,1}},
+   {{1,0},{2,0},{1,1},{2,1}}, {{1,0},{2,0},{1,1},{2,1}}},
+  {{{1,0},{0,1},{1,1},{2,1}}, {{1,0},{1,1},{2,1},{1,2}},
+   {{0,1},{1,1},{2,1},{1,2}}, {{1,0},{0,1},{1,1},{1,2}}},
+  {{{1,0},{2,0},{0,1},{1,1}}, {{1,0},{1,1},{2,1},{2,2}},
+   {{1,1},{2,1},{0,2},{1,2}}, {{0,0},{0,1},{1,1},{1,2}}},
+  {{{0,0},{1,0},{1,1},{2,1}}, {{2,0},{1,1},{2,1},{1,2}},
+   {{0,1},{1,1},{1,2},{2,2}}, {{1,0},{0,1},{1,1},{0,2}}},
+  {{{0,0},{0,1},{1,1},{2,1}}, {{1,0},{2,0},{1,1},{1,2}},
+   {{0,1},{1,1},{2,1},{2,2}}, {{1,0},{1,1},{0,2},{1,2}}},
+  {{{2,0},{0,1},{1,1},{2,1}}, {{1,0},{1,1},{1,2},{2,2}},
+   {{0,1},{1,1},{2,1},{0,2}}, {{0,0},{1,0},{1,1},{1,2}}}
+};
+
+// --- Game logic ---
+
+bool fits(int8_t t, int8_t r, int8_t px, int8_t py) {
   for (int i = 0; i < 4; i++) {
-    int x = px + SHAPES[type][rot][i][0];
-    int y = py + SHAPES[type][rot][i][1];
-    if (x < 0 || x >= BOARD_W || y < 0 || y >= BOARD_H) return false;
+    int x = px + SH[t][r][i][0];
+    int y = py + SH[t][r][i][1];
+    if (x < 0 || x >= BW || y < 0 || y >= BH) return false;
     if (board[y][x]) return false;
   }
   return true;
 }
 
-void drawCell(int x, int y, bool filled) {
-  int px = BOARD_X + x * CELL;
-  int py = BOARD_Y + y * CELL;
-  if (filled) {
-    u8g2.drawBox(px, py, CELL, CELL);
-  } else {
-    u8g2.drawFrame(px, py, CELL, CELL);
-  }
-}
-
-void clearBoard() {
-  for (int y = 0; y < BOARD_H; y++) {
-    for (int x = 0; x < BOARD_W; x++) {
-      board[y][x] = 0;
-    }
-  }
-}
-
-bool spawnPiece() {
-  cur.type = random(7);
-  cur.rot = random(4);
-  cur.x = 3;
-  cur.y = 0;
-  return validAt(cur.type, cur.rot, cur.x, cur.y);
-}
-
-void startGame() {
-  clearBoard();
-  score = 0;
-  lines = 0;
-  lastFallMs = millis();
-  if (!spawnPiece()) {
-    gameState = STATE_GAME_OVER;
-    return;
-  }
-  gameState = STATE_PLAYING;
-  Serial.println("Tetris started.");
-}
-
 void lockPiece() {
   for (int i = 0; i < 4; i++) {
-    int x = cur.x + SHAPES[cur.type][cur.rot][i][0];
-    int y = cur.y + SHAPES[cur.type][cur.rot][i][1];
-    if (x >= 0 && x < BOARD_W && y >= 0 && y < BOARD_H) {
+    int x = cur.x + SH[cur.type][cur.rot][i][0];
+    int y = cur.y + SH[cur.type][cur.rot][i][1];
+    if (x >= 0 && x < BW && y >= 0 && y < BH)
       board[y][x] = 1;
-    }
   }
 }
 
-void clearLines() {
-  int cleared = 0;
-  for (int y = BOARD_H - 1; y >= 0; y--) {
+bool spawn() {
+  cur.type = random(7);
+  cur.rot = 0;
+  cur.x = 3;
+  cur.y = 0;
+  return fits(cur.type, cur.rot, cur.x, cur.y);
+}
+
+void doClear() {
+  int n = 0;
+  for (int y = BH - 1; y >= 0; y--) {
     bool full = true;
-    for (int x = 0; x < BOARD_W; x++) {
-      if (!board[y][x]) {
-        full = false;
-        break;
-      }
+    for (int x = 0; x < BW; x++) {
+      if (!board[y][x]) { full = false; break; }
     }
     if (full) {
-      for (int yy = y; yy > 0; yy--) {
-        for (int x = 0; x < BOARD_W; x++) {
+      for (int yy = y; yy > 0; yy--)
+        for (int x = 0; x < BW; x++)
           board[yy][x] = board[yy - 1][x];
-        }
-      }
-      for (int x = 0; x < BOARD_W; x++) board[0][x] = 0;
-      cleared++;
+      for (int x = 0; x < BW; x++) board[0][x] = 0;
+      n++;
       y++;
     }
   }
-
-  if (cleared > 0) {
-    lines += cleared;
-    score += (cleared * cleared) * 10;
-    Serial.print("Lines cleared: ");
-    Serial.print(cleared);
-    Serial.print(" total lines=");
-    Serial.print(lines);
-    Serial.print(" score=");
-    Serial.println(score);
+  if (n) {
+    totalLines += n;
+    score += n * n * 10;
+    startFx(FX_CLEAR, n);
+    flashGreen(300 + n * 100);
+    Serial.printf("Cleared %d  total=%d  score=%d\n", n, totalLines, score);
   }
 }
 
-void gameOver() {
-  gameState = STATE_GAME_OVER;
-  Serial.print("Game over. Score=");
-  Serial.print(score);
-  Serial.print(" Lines=");
-  Serial.println(lines);
+void doGameOver() {
+  state = S_OVER;
+  startFx(FX_OVER);
+  Serial.printf("Game over  score=%d  lines=%d\n", score, totalLines);
 }
 
-void rotatePiece() {
-  int8_t nextRot = (cur.rot + 1) % 4;
-  if (validAt(cur.type, nextRot, cur.x, cur.y)) {
-    cur.rot = nextRot;
+void moveRight() {
+  if (fits(cur.type, cur.rot, cur.x + 1, cur.y)) {
+    cur.x++;
+  } else {
+    for (int8_t tx = 0; tx < cur.x; tx++) {
+      if (fits(cur.type, cur.rot, tx, cur.y)) {
+        cur.x = tx;
+        return;
+      }
+    }
   }
 }
 
-void hardDrop() {
-  while (validAt(cur.type, cur.rot, cur.x, cur.y + 1)) {
-    cur.y++;
-  }
-  lockPiece();
-  clearLines();
-  if (!spawnPiece()) gameOver();
+void rotate() {
+  int8_t nr = (cur.rot + 1) % 4;
+  if      (fits(cur.type, nr, cur.x,     cur.y)) { cur.rot = nr; }
+  else if (fits(cur.type, nr, cur.x - 1, cur.y)) { cur.x--; cur.rot = nr; }
+  else if (fits(cur.type, nr, cur.x + 1, cur.y)) { cur.x++; cur.rot = nr; }
+  else if (fits(cur.type, nr, cur.x - 2, cur.y)) { cur.x -= 2; cur.rot = nr; }
+  else if (fits(cur.type, nr, cur.x + 2, cur.y)) { cur.x += 2; cur.rot = nr; }
 }
 
 void stepFall() {
-  if (validAt(cur.type, cur.rot, cur.x, cur.y + 1)) {
+  if (fits(cur.type, cur.rot, cur.x, cur.y + 1)) {
     cur.y++;
   } else {
     lockPiece();
-    clearLines();
-    if (!spawnPiece()) {
-      gameOver();
-    }
+    flashGreen(60);
+    startFx(FX_LOCK);
+    doClear();
+    if (!spawn()) doGameOver();
   }
 }
 
-int centeredX(const char *txt) {
-  return (SCREEN_W - u8g2.getStrWidth(txt)) / 2;
-}
+// --- Drawing ---
 
-void drawStart() {
+int cx(const char *t) { return (SCR_W - u8g2.getStrWidth(t)) / 2; }
+
+void drawTitle() {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_5x7_tr);
-  u8g2.drawStr(centeredX("TETRIS"), 12, "TETRIS");
-  u8g2.drawStr(centeredX("Press To Start"), 26, "Press To Start");
+  u8g2.drawStr(cx("TETRIS"), 10, "TETRIS");
+  u8g2.setFont(u8g2_font_4x6_tr);
+  u8g2.drawStr(cx("tap: move >"), 20, "tap: move >");
+  u8g2.drawStr(cx("hold: rotate"), 28, "hold: rotate");
+  u8g2.drawStr(cx("press to play"), 38, "press to play");
   u8g2.sendBuffer();
 }
 
-void drawGameOver() {
-  char scoreTxt[16];
-  snprintf(scoreTxt, sizeof(scoreTxt), "Score %u", score);
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_5x7_tr);
-  u8g2.drawStr(centeredX("Game Over"), 14, "Game Over");
-  u8g2.drawStr(centeredX(scoreTxt), 24, scoreTxt);
-  u8g2.drawStr(centeredX("Press"), 36, "Press");
-  u8g2.sendBuffer();
-}
-
-void drawPlay() {
+void drawGame() {
   u8g2.clearBuffer();
 
-  for (int y = 0; y < BOARD_H; y++) {
-    for (int x = 0; x < BOARD_W; x++) {
-      if (board[y][x]) drawCell(x, y, true);
-    }
-  }
+  for (int y = 0; y < BH; y++)
+    for (int x = 0; x < BW; x++)
+      if (board[y][x])
+        u8g2.drawBox(x * CELL, y * CELL, CELL, CELL);
 
   for (int i = 0; i < 4; i++) {
-    int x = cur.x + SHAPES[cur.type][cur.rot][i][0];
-    int y = cur.y + SHAPES[cur.type][cur.rot][i][1];
-    if (x >= 0 && x < BOARD_W && y >= 0 && y < BOARD_H) {
-      drawCell(x, y, true);
+    int x = cur.x + SH[cur.type][cur.rot][i][0];
+    int y = cur.y + SH[cur.type][cur.rot][i][1];
+    if (x >= 0 && x < BW && y >= 0 && y < BH)
+      u8g2.drawBox(x * CELL, y * CELL, CELL, CELL);
+  }
+
+  int8_t gy = cur.y;
+  while (fits(cur.type, cur.rot, cur.x, gy + 1)) gy++;
+  if (gy != cur.y) {
+    for (int i = 0; i < 4; i++) {
+      int x = cur.x + SH[cur.type][cur.rot][i][0];
+      int y = gy   + SH[cur.type][cur.rot][i][1];
+      if (x >= 0 && x < BW && y >= 0 && y < BH)
+        u8g2.drawFrame(x * CELL, y * CELL, CELL, CELL);
     }
   }
 
   u8g2.setFont(u8g2_font_4x6_tr);
-  char s1[12], s2[12];
-  snprintf(s1, sizeof(s1), "S%u", score);
-  snprintf(s2, sizeof(s2), "L%u", lines);
-  u8g2.drawStr(42, 8, s1);
-  u8g2.drawStr(42, 16, s2);
-  u8g2.drawStr(42, 26, "tap rot");
-  u8g2.drawStr(42, 34, "hold drp");
+  char buf[12];
+  snprintf(buf, sizeof(buf), "S%u", score);
+  u8g2.drawStr(42, 8, buf);
+  snprintf(buf, sizeof(buf), "L%u", totalLines);
+  u8g2.drawStr(42, 16, buf);
 
   u8g2.sendBuffer();
 }
 
-void handleButton() {
-  bool pressed = (digitalRead(BOOT_BTN_PIN) == LOW);
-  unsigned long now = millis();
+void drawOver() {
+  char buf[16];
+  snprintf(buf, sizeof(buf), "Score %u", score);
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_5x7_tr);
+  u8g2.drawStr(cx("GAME OVER"), 14, "GAME OVER");
+  u8g2.setFont(u8g2_font_4x6_tr);
+  u8g2.drawStr(cx(buf), 26, buf);
+  u8g2.drawStr(cx("press btn"), 38, "press btn");
+  u8g2.sendBuffer();
+}
 
-  if (pressed && !buttonWasDown) {
-    buttonWasDown = true;
-    pressStartMs = now;
-    longHandled = false;
-  }
+// --- Core ---
 
-  if (pressed && buttonWasDown && gameState == STATE_PLAYING && !longHandled &&
-      (now - pressStartMs) >= LONG_PRESS_MS && (now - lastPressEventMs) > BUTTON_DEBOUNCE_MS) {
-    longHandled = true;
-    lastPressEventMs = now;
-    hardDrop();
-  }
-
-  if (!pressed && buttonWasDown) {
-    if (!longHandled && (now - lastPressEventMs) > BUTTON_DEBOUNCE_MS) {
-      lastPressEventMs = now;
-      if (gameState == STATE_START) {
-        startGame();
-      } else if (gameState == STATE_PLAYING) {
-        rotatePiece();
-      } else {
-        gameState = STATE_START;
-      }
-    }
-    buttonWasDown = false;
-  }
+void startGame() {
+  memset(board, 0, sizeof(board));
+  score = 0;
+  totalLines = 0;
+  lastFall = millis();
+  startFx(FX_START);
+  flashGreen(150);
+  if (!spawn()) { doGameOver(); return; }
+  state = S_PLAY;
+  Serial.println("Game started");
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1500);
-  Serial.println("Tetris booting...");
+  Serial.println("Tetris v3 booting...");
+  Serial.println("BOOT button (right): tap = move right (wraps), hold = rotate");
 
-  pinMode(BOOT_BTN_PIN, INPUT_PULLUP);
+  pinMode(BTN_PIN, INPUT_PULLUP);
+  pinMode(GRN_LED, OUTPUT);
+  digitalWrite(GRN_LED, HIGH);
 
-  Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
+  Wire.begin(OLED_SDA, OLED_SCL);
   u8g2.begin();
   u8g2.setContrast(60);
 
+  neo.begin();
+  neo.setBrightness(40);
+  neo.setPixelColor(0, 0);
+  neo.show();
+
   randomSeed(micros());
-  drawStart();
+  drawTitle();
 }
 
 void loop() {
-  handleButton();
+  Act a = pollBtn();
 
-  if (gameState == STATE_START) {
-    drawStart();
-    delay(20);
-    return;
+  switch (state) {
+    case S_TITLE:
+      if (a != A_NONE) startGame();
+      drawTitle();
+      break;
+
+    case S_PLAY: {
+      if (a == A_TAP)  moveRight();
+      if (a == A_LONG) rotate();
+
+      unsigned long now = millis();
+      uint16_t spd = totalLines * 20;
+      uint16_t fall = (FALL_START > spd) ? (FALL_START - spd) : FALL_MIN;
+      if (fall < FALL_MIN) fall = FALL_MIN;
+      if (now - lastFall >= fall) {
+        lastFall = now;
+        stepFall();
+      }
+
+      if (state == S_PLAY) drawGame();
+      break;
+    }
+
+    case S_OVER:
+      if (a == A_TAP) state = S_TITLE;
+      drawOver();
+      break;
   }
 
-  if (gameState == STATE_GAME_OVER) {
-    drawGameOver();
-    delay(20);
-    return;
-  }
-
-  unsigned long now = millis();
-  uint16_t speedup = lines * 20;
-  uint16_t fallMs = (FALL_MS_START > speedup) ? (FALL_MS_START - speedup) : FALL_MS_MIN;
-  if (fallMs < FALL_MS_MIN) fallMs = FALL_MS_MIN;
-
-  if (now - lastFallMs >= fallMs) {
-    lastFallMs = now;
-    stepFall();
-  }
-
-  if (gameState == STATE_PLAYING) {
-    drawPlay();
-  }
+  tickLeds();
   delay(10);
 }
